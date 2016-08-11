@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
+import csv
 
-# Define your item pipelines here
-#
-# Don't forget to add your pipeline to the ITEM_PIPELINES setting
-# See: http://doc.scrapy.org/en/latest/topics/item-pipeline.html
+class CsvWriterPipeline(object):
 
+	def __init__(self):
+		self.csvwriter = csv.writer(open('items.csv','wb'))
 
-class NflscraperPipeline(object):
-    def process_item(self, item, spider):
-        return item
+	def process_item(self,item,pfr):
+		self.csvwriter.writerow([item[key] for key in item.keys()])
+		return item
