@@ -88,11 +88,11 @@ class NFLScraperSpider(scrapy.Spider):
 		
 		# Total sacks and sack yards
 		hsack = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[4]/td[2]/text()').extract()[0]
-		item['home_sack'] = hsack[hsack.find("-")+1:]
+		item['hsack_yds'] = hsack[hsack.find("-")+1:]
 		asack = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[4]/td[1]/text()').extract()[0]
-		item['away_sack'] = asack[asack.find("-")+1:]
-		item['hsack_yds'] = hsack[:hsack.find("-")]
-		item['asack_yds'] = asack[:asack.find("-")]
+		item['asack_yds'] = asack[asack.find("-")+1:]
+		item['home_sack'] = hsack[:hsack.find("-")]
+		item['away_sack'] = asack[:asack.find("-")]
 		
 		# Net passing yards (total passing yards minus yards sacked)
 		item['home_pass'] = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[5]/td[2]/text()').extract()[0]
