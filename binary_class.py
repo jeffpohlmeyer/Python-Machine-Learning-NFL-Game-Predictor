@@ -1,7 +1,7 @@
 import pandas as pd
 import datetime
 import numpy as np
-from sklearn import preprocessing, cross_validation, svm
+from sklearn import preprocessing, cross_validation, svm, linear_model
 
 # Read in csv table
 df = pd.read_csv('nflscraper/command_results.csv')
@@ -9,9 +9,28 @@ df = pd.read_csv('nflscraper/command_results.csv')
 # Change the string date data in df to datetime format
 df['game_date'] = pd.to_datetime(df['game_date'],format='%Y-%m-%d')
 
-# Set date after which you don't want to use data to train classifier
+
+""" Create home time of possession differential """
+# Convert objects to datetime values
+df['home_poss'] = pd.to_datetime(df['home_poss'],format='%M:%S')
+df['away_poss'] = pd.to_datetime(df['away_poss'],format='%M:%S')
+
+# Convert datetime values to fractions of an hour
+df['home_poss'] = df['home_poss'].dt.minute / 60.0 + df['home_poss'].dt.second / 3600.0
+df['away_poss'] = df['away_poss'].dt.minute / 60.0 + df['away_poss'].dt.second / 3600.0
+
+# Find total possession time (only really matters because games can go to overtime)
+# And re-weight time of possession
+df['total_poss'] = df['home_poss'] + df['away_poss']
+df['home_poss'] = df['home_poss'] / df['total_poss']
+df['away_poss'] = df['away_poss'] / df['total_poss']
+df.drop('total_poss',axis = 1, inplace=True)    # Delete total possession column as it's no longer needed
+
+
+""" Set date after which you don't want to use data to train classifier """
 cutoff_date = datetime.date(2015, 8, 1)
 
+""" Creating prediction dataset """
 # Create dataset to be used for prediction
 predicting_set = df[df.game_date >= cutoff_date].set_index('game_date')
 predicting_set = predicting_set.sort_index()    # Sort ascending by index
@@ -33,6 +52,7 @@ week_dict[datetime.date(2016,2,7)] = 21         # This is manually done since th
 
 # Update the week column in the dataframe with the dictionary values and then delete the dictionary and its components used to create it
 predicting_set['week'].update(pd.Series(week_dict))
+
 del week_dict, start_date, end_date, date_val, week_val
 
 # Manually call the names of the columns from the scraped data
@@ -47,13 +67,28 @@ away_cols = {'game week': 'game week', 'away_four': 'fourth down', 'away_oyds': 
 away = predicting_set.drop(home_columns,axis=1)
 home = predicting_set.drop(away_columns,axis=1)
 
+# Create home and away scores which will be used to compare to the predicted value
+away_score = predicting_set[['away_score','week']]
+home_score = predicting_set[['home_score','week']]
+# Remove all games not included in the prediction
+away_score = away_score[away_score.week >= 5]
+home_score = home_score[home_score.week >= 5]
+# Drop the 'week' column as it is no longer needed
+away_score.drop('week',axis=1,inplace=True)
+home_score.drop('week',axis=1,inplace=True)
+
 # Rename the columns in these dataframes removing the home and away modifier according to the mapping
 away.rename(columns=away_cols,inplace=True)
 home.rename(columns=home_cols,inplace=True)
 
-# Sort the column names alphabetically
+# Sort the rows chronologically
 away.sort_index(axis=1,inplace=True)
 home.sort_index(axis=1,inplace=True)
+away_score.sort_index(inplace=True)
+home_score.sort_index(inplace=True)
+
+# Create the actual result vector where a tie counts as a loss for the home team
+game_result = np.array(np.where(home_score.ix[:,0] > away_score.ix[:,0], 1, 0))
 
 # Group both home and away stats into one dataframe
 total_set = home.append(away)
@@ -86,48 +121,67 @@ for week in range(5,22):
     else:
         total_stats = total_stats.append(weekly_stats)
 
-# print total_stats.loc['Carolina Panthers']
+# Create the needed columns for the eventual prediction
+matchup_columns = ['week','home_team','away_team', 'sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']
+# Create the DataFrame and pull in the 'week' 'home_team' and 'away_team columns
+matchups = pd.DataFrame(columns = matchup_columns)
+matchups[['week','home_team','away_team']] = predicting_set[['week','home_team','away_team']]
 
+# Remove any results from the first four weeks
+matchups = matchups[matchups.week >= 5]
 
+# Create the actual differential values using averages from each week
+for row in range(len(matchups)):
+    h_team = matchups.iloc[row]['home_team']
+    a_team = matchups.iloc[row]['away_team']
+    week = matchups.iloc[row]['week']
 
+    # pass_diff
+    h_pass = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['pass yards'].values[0]
+    a_pass = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['pass yards'].values[0]
+    matchups.ix[row,'pass_diff'] = h_pass - a_pass
 
+    # rush_diff
+    h_rush = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['rush yards'].values[0]
+    a_rush = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['rush yards'].values[0]
+    matchups.ix[row, 'rush_diff'] = h_rush - a_rush
 
+    # sack_diff
+    h_sack = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['sacks'].values[0]
+    a_sack = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['sacks'].values[0]
+    matchups.ix[row, 'sack_diff'] = h_sack - a_sack
 
+    #sack_ydiff
+    h_sack_yds = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['sack yards'].values[0]
+    a_sack_yds = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['sack yards'].values[0]
+    matchups.ix[row, 'sack_ydiff'] = h_sack_yds - a_sack_yds
 
+    # pens_diff
+    h_pen_yds = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['penalty yards'].values[0]
+    a_pen_yds = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['penalty yards'].values[0]
+    matchups.ix[row, 'pens_diff'] = h_pen_yds - a_pen_yds
 
+    # poss_diff
+    h_poss = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['possession'].values[0]
+    a_poss = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['possession'].values[0]
+    matchups.ix[row, 'poss_diff'] = h_poss - a_poss
 
+    # third_diff
+    h_third = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['third down'].values[0]
+    a_third = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['third down'].values[0]
+    matchups.ix[row, 'third_diff'] = h_third - a_third
 
+    # turn_diff
+    h_turn = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['turnovers'].values[0]
+    a_turn = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['turnovers'].values[0]
+    matchups.ix[row, 'turn_diff'] = h_turn - a_turn
 
-
-
-
-
-
-
-
+""" Create the testing set for the algo creation """
+# Remove the predicting set from the dataframe
 df = df[df.game_date < cutoff_date]
 
 # Fill NaNs with outlier values
 df.fillna(-999999, inplace=True)
-
-# Calculate home yardage differential
-# df['yard_diff'] = df['home_oyds'] - df['away_oyds']
-
-# Create home time of possession differential
-# Convert objects to datetime values
-df['home_poss'] = pd.to_datetime(df['home_poss'],format='%M:%S')
-df['away_poss'] = pd.to_datetime(df['away_poss'],format='%M:%S')
-
-# Convert datetime values to fractions of an hour
-df['home_poss'] = df['home_poss'].dt.minute / 60.0 + df['home_poss'].dt.second / 3600.0
-df['away_poss'] = df['away_poss'].dt.minute / 60.0 + df['away_poss'].dt.second / 3600.0
-
-# Find total possession time (only really matters because games can go to overtime)
-# And re-weight time of possession
-df['total_poss'] = df['home_poss'] + df['away_poss']
-df['home_poss'] = df['home_poss'] / df['total_poss']
-df['away_poss'] = df['away_poss'] / df['total_poss']
-df.drop('total_poss',axis = 1, inplace=True)    # Delete total possession column as it's no longer needed
 
 # Calculate time of possession differential
 df['poss_diff'] = df['home_poss'] - df['away_poss']
@@ -157,6 +211,8 @@ df['rush_diff'] = df['home_rush'] - df['away_rush']
 X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 # X = df[['poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 
+
+""" Train, test, and predict the algorithm """
 # Scale the sample data
 X = preprocessing.scale(X)
 
@@ -174,5 +230,12 @@ X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_si
 clf = svm.LinearSVC()
 clf.fit(X_train, y_train)
 accuracy = clf.score(X_test,y_test)
+print 'Accuracy:',accuracy
 
-print accuracy
+# Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
+matchups.drop(['week','home_team','away_team'],axis=1,inplace=True)
+prediction_result = clf.predict(preprocessing.scale(matchups))
+
+prediction_accuracy = np.array(np.where(prediction_result == game_result,1,0))
+
+print 'Prediction:',float(np.sum(prediction_accuracy)) / len(prediction_accuracy)
