@@ -3,11 +3,13 @@ import datetime
 import numpy as np
 from sklearn import preprocessing, cross_validation, svm, linear_model
 
+"""This method is purely for checking that the logic works"""
 def print_full(x):
     pd.set_option('display.max_rows', len(x))
     print(x)
     pd.reset_option('display.max_rows')
 
+"""This method converts the calculated probability to a spread"""
 def spread_conversion(x):
     """
     http://www.bettingtalk.com/win-probability-percentage-point-spread-nfl-nba/
@@ -90,7 +92,7 @@ def spread_conversion(x):
     else:
         return float(return_val)
 
-        # Read in csv table
+# Read in csv table
 df = pd.read_csv('nflscraper/command_results.csv')
 
 # Change the string date data in df to datetime format
@@ -178,13 +180,16 @@ home.sort_index(axis=1,inplace=True)
 away_score.sort_index(inplace=True)
 home_score.sort_index(inplace=True)
 
-spreads = home['spread'].str.split().str[-1]
+# Pull the actual spreads from the scraped data
+spreads = home[home['week'] >= 5]
+spreads = spreads['spread'].str.split().str[-1]
 spreads = pd.to_numeric(spreads)
+
 home.drop(['spread','total score'],axis=1,inplace=True)
 away.drop(['spread','total score'],axis=1,inplace=True)
 
 # Create the actual result vector where a tie counts as a loss for the home team
-game_result = np.array(np.where(home_score.ix[:,0] > away_score.ix[:,0], 1, 0))
+game_result = np.array(np.where(home_score.ix[:,0] + spreads[:] > away_score.ix[:,0], 1, 0))
 
 # Group both home and away stats into one dataframe
 total_set = home.append(away)
@@ -325,26 +330,21 @@ X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_si
 # clf = LogisticRegression()
 clf = linear_model.LogisticRegression(C=0.00015)
 clf.fit(X_train, y_train)
-accuracy = clf.score(X_test,y_test)
-# print 'Accuracy:',accuracy
-
-print matchups.tail()
 
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week','home_team','away_team'],axis=1,inplace=True)
-# prediction_result = clf.predict(preprocessing.scale(matchups))
 
-# prediction_accuracy = np.array(np.where(prediction_result == game_result,1,0))
-
-# print 'Prediction:',float(np.sum(prediction_accuracy)) / len(prediction_accuracy)
-# print clf.classes_
+# Calculate probabilities using the predict_proba method for logistic regression
 probabilities = clf.predict_proba(matchups)
-# print_full(probabilities[:,1])
+
+# Vectorize the spread_conversion function and apply the function to the probabilities result vector
 vfunc = np.vectorize(spread_conversion)
 predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,1])
-# print np.amax(clf.predict_proba(matchups),axis=0)
 
-print len(predicted_spreads)
-print len(spreads)
+# If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
+bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
 
-# bet_vector = np.array(np.where(predicted_spreads > spreads,'away','home'))
+# Check to see where the bet_vector equals the actual game result with the spread included
+result = np.array(np.where(bet_vector == game_result,1,0))
+
+print float(np.sum(result)) / len(result)
