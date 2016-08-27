@@ -9,92 +9,10 @@ def print_full(x):
     print(x)
     pd.reset_option('display.max_rows')
 
-"""This method converts the calculated probability to a spread"""
-def spread_conversion(x):
-    """
-    http://www.bettingtalk.com/win-probability-percentage-point-spread-nfl-nba/
-    """
-
-    home_dog = False
-    if x < 0.5:
-        x = 1.0 - x
-        home_dog = True
-
-    if x < .513:
-        return_val = -0.5
-    elif x < .525:
-        return_val = -1
-    elif x < .535:
-        return_val = -1.5
-    elif x < .545:
-        return_val = -2
-    elif x < .594:
-        return_val = -2.5
-    elif x < .643:
-        return_val = -3
-    elif x < .658:
-        return_val = -3.5
-    elif x < .673:
-        return_val = -4
-    elif x < .681:
-        return_val = -4.5
-    elif x < .69:
-        return_val = -5
-    elif x < .707:
-        return_val = -5.5
-    elif x < .724:
-        return_val = -6
-    elif x < .752:
-        return_val = -6.5
-    elif x < .781:
-        return_val = -7
-    elif x < .791:
-        return_val = -7.5
-    elif x < .802:
-        return_val = -8
-    elif x < .807:
-        return_val = -8.5
-    elif x < .811:
-        return_val = -9
-    elif x < .836:
-        return_val = -9.5
-    elif x < .86:
-        return_val = -10
-    elif x < .871:
-        return_val = -10.5
-    elif x < .882:
-        return_val = -11
-    elif x < .885:
-        return_val = -11.5
-    elif x < .887:
-        return_val = -12
-    elif x < .893:
-        return_val = -12.5
-    elif x < .9:
-        return_val = -13
-    elif x < .924:
-        return_val = -13.5
-    elif x < .949:
-        return_val = -14
-    elif x < .956:
-        return_val = -14.5
-    elif x < .963:
-        return_val = -15
-    elif x < .981:
-        return_val = -15.5
-    elif x < .998:
-        return_val = -16
-    else:
-        return_val = -16.5
-
-    if home_dog == True:
-        return float(-return_val)
-    else:
-        return float(return_val)
-
-C_vec = [0.0001, 0.0003, 0.0006, 0.001, 0.003, 0.006, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1.0, 3.0, 6.0, 10.0]
+alphas = [0.0001, 0.0003, 0.0006, 0.001, 0.003, 0.006, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1.0, 3.0, 6.0, 10.0]
 prob_val = 0
-C_val = 0
+alpha_val = 0
+
 
 # Read in csv table
 df = pd.read_csv('nflscraper/command_results.csv')
@@ -316,14 +234,13 @@ df['rush_diff'] = df['home_rush'] - df['away_rush']
 X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 # X = df[['poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 
-
 """ Train, test, and predict the algorithm """
 # Scale the sample data
 scaler = preprocessing.StandardScaler().fit(X)
 X = scaler.transform(X)
 
 # Create results vector (a home win = 1, a home loss or tie = 0)
-y = np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
+y = df['away_score'] - df['home_score']#np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
 
 # Delete the dataframe to clear memory
 del df
@@ -334,31 +251,27 @@ X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_si
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week', 'home_team', 'away_team'], axis=1, inplace=True)
 
-for c in C_vec:
-    # Create the classifier and check the score
+for alph in alphas:
+    # Create the regression model and check the score
     # clf = LogisticRegression()
-    clf = linear_model.LogisticRegression(C=c)
+    clf = linear_model.Lasso(alpha=alph,selection='random',random_state=2)
     clf.fit(X_train, y_train)
+    accuracy = clf.score(X_test,y_test)
 
     # Calculate probabilities using the predict_proba method for logistic regression
-    probabilities = clf.predict_proba(scaler.transform(matchups))
-
-    # Vectorize the spread_conversion function and apply the function to the probabilities result vector
-    vfunc = np.vectorize(spread_conversion)
-    predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,1])
+    probabilities = clf.predict(scaler.transform(matchups))
 
     # If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
-    bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
+    bet_vector = np.array(np.where(probabilities > spreads,0,1))
 
     # Check to see where the bet_vector equals the actual game result with the spread included
     result = np.array(np.where(bet_vector == game_result,1,0))
 
     prob_result = float(np.sum(result)) / len(result)
 
-    print 'C =',c,'  Percent correct =',prob_result
-
+    print 'alpha =', alph, '  Percent correct =', prob_result
     if prob_result > prob_val:
         prob_val = prob_result
-        C_val = c
+        alpha_val = alph
 
-print prob_val, C_val
+print prob_val, alpha_val

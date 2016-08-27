@@ -214,7 +214,8 @@ X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn
 
 """ Train, test, and predict the algorithm """
 # Scale the sample data
-X = preprocessing.scale(X)
+scaler = preprocessing.StandardScaler().fit(X)
+X = scaler.transform(X)
 
 # Create results vector (a home win = 1, a home loss or tie = 0)
 y = np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
@@ -234,7 +235,7 @@ print 'Accuracy:',accuracy
 
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week','home_team','away_team'],axis=1,inplace=True)
-prediction_result = clf.predict(preprocessing.scale(matchups))
+prediction_result = clf.predict(scaler.transform(matchups))
 
 prediction_accuracy = np.array(np.where(prediction_result == game_result,1,0))
 
