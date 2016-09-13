@@ -93,12 +93,28 @@ def spread_conversion(x):
     else:
         return float(return_val)
 
-C_vec = [0.0001, 0.0003, 0.0006, 0.001, 0.003, 0.006, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1.0, 3.0, 6.0, 10.0]
-prob_val = 0
-C_val = 0
-
 # Read in csv table
 df = pd.read_csv('nflscraper/command_results.csv')
+
+# # Calculate offensive efficiency (pass yards per attempt and rush yards per carry)
+# home_pass_stats = pd.DataFrame(df['hpass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
+# away_pass_stats = pd.DataFrame(df['apass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
+# away_pass_stats.replace('neg7','-7',inplace=True)
+# home_pass_stats['yards'] = home_pass_stats['yards'].astype(float)
+# home_pass_stats['attempts'] = home_pass_stats['attempts'].astype(float)
+# away_pass_stats['yards'] = away_pass_stats.yards.astype(float)
+# away_pass_stats['attempts'] = away_pass_stats.attempts.astype(float)
+
+# df['home_pass'] = home_pass_stats['yards'] / home_pass_stats['attempts']
+# df['away_pass'] = away_pass_stats['yards'] / away_pass_stats['attempts']
+# del home_pass_stats, away_pass_stats
+
+# df['home_rush'].astype(float)
+# df['hrush_att'].astype(float)
+# df['away_rush'].astype(float)
+# df['arush_att'].astype(float)
+# df['home_rush'] = df['home_rush'] / df['hrush_att']
+# df['away_rush'] = df['away_rush'] / df['arush_att']
 
 # Change the string date data in df to datetime format
 df['game_date'] = pd.to_datetime(df['game_date'],format='%Y-%m-%d')
@@ -152,8 +168,8 @@ predicting_set['vegasline'].replace('Pick','0')
 del week_dict, start_date, end_date, date_val, week_val
 
 # Manually call the names of the columns from the scraped data
-home_columns = ['home_four','home_oyds','home_pass','home_pens','home_poss','home_rush','home_sack','home_score','home_team','home_third','home_turn','hpens_yds','hsack_yds']
-away_columns = ['apens_yds','asack_yds','away_four','away_oyds','away_pass','away_pens','away_poss','away_rush','away_sack','away_score','away_team','away_third','away_turn']
+home_columns = ['home_four','home_oyds','home_pass','home_pens','home_poss','home_rush','home_sack','home_score','home_team','home_third','home_turn','hpens_yds','hsack_yds']#,'hpass_tot','hrush_att']
+away_columns = ['apens_yds','asack_yds','away_four','away_oyds','away_pass','away_pens','away_poss','away_rush','away_sack','away_score','away_team','away_third','away_turn']#,'apass_tot','arush_att']
 # Create a mapping to combine home and away columns
 home_cols = {'game week': 'game week', 'home_four': 'fourth down', 'home_oyds': 'total yards', 'home_pass': 'pass yards', 'home_pens': 'penalties', 'home_poss': 'possession', 'home_rush': 'rush yards',
              'home_sack': 'sacks', 'home_score': 'score', 'home_team': 'team', 'home_third': 'third down', 'home_turn': 'turnovers', 'hpens_yds': 'penalty yards', 'hsack_yds': 'sack yards',
@@ -164,6 +180,12 @@ away_cols = {'game week': 'game week', 'away_four': 'fourth down', 'away_oyds': 
 # Create only home and away dataframes
 away = predicting_set.drop(home_columns,axis=1)
 home = predicting_set.drop(away_columns,axis=1)
+# away.drop('apass_tot',axis=1,inplace=True)
+# away.drop('arush_att',axis=1,inplace=True)
+# away.drop('away_oyds',axis=1,inplace=True)
+# home.drop('hpass_tot',axis=1,inplace=True)
+# home.drop('hrush_att',axis=1,inplace=True)
+# home.drop('home_oyds',axis=1,inplace=True)
 
 # Create home and away scores which will be used to compare to the predicted value
 away_score = predicting_set[['away_score','week']]
@@ -345,6 +367,9 @@ regressor.fit(X_train, y_train, steps=500)
 # Predict and score
 y_predicted = list(regressor.predict(x=scaler.transform(matchups), as_iterable=True))
 
+print y_predicted
+raw_input
+
 min_val = min(y_predicted)
 max_val = max(y_predicted)
 y_predicted = (y_predicted - min_val) / (max_val - min_val)
@@ -361,35 +386,8 @@ prob_result = float(np.sum(result)) / len(result)
 print prob_result
 
 raw_input()
-score = metrics.mean_squared_error(y_predicted, game_result)
+print result
+print game_result
+score = metrics.mean_squared_error(result, game_result)
 
 print('MSE: {0:f}'.format(score))
-
-# for c in C_vec:
-#     # Create the classifier and check the score
-#     # clf = LogisticRegression()
-#     clf = linear_model.LogisticRegression(C=c)
-#     clf.fit(X_train, y_train)
-
-#     # Calculate probabilities using the predict_proba method for logistic regression
-#     probabilities = clf.predict_proba(scaler.transform(matchups))
-
-#     # Vectorize the spread_conversion function and apply the function to the probabilities result vector
-#     vfunc = np.vectorize(spread_conversion)
-#     predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,1])
-
-#     # If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
-#     bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
-
-#     # Check to see where the bet_vector equals the actual game result with the spread included
-#     result = np.array(np.where(bet_vector == game_result,1,0))
-
-#     prob_result = float(np.sum(result)) / len(result)
-
-#     print 'C =',c,'  Percent correct =',prob_result
-
-#     if prob_result > prob_val:
-#         prob_val = prob_result
-#         C_val = c
-
-# print prob_val, C_val
