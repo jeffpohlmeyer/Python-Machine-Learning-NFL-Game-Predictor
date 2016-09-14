@@ -1,38 +1,8 @@
 import pandas as pd
 import datetime
 import numpy as np
-from sklearn import preprocessing, cross_validation, svm, linear_model
-import matplotlib.pyplot as plt
-from sklearn.learning_curve import learning_curve
-
-"""Found at http://scikit-learn.org/stable/auto_examples/model_selection/plot_learning_curve.html"""
-def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5)):
-    plt.figure()
-    plt.title(title)
-    if ylim is not None:
-        plt.ylim(*ylim)
-    plt.xlabel("Training examples")
-    plt.ylabel("Score")
-    train_sizes, train_scores, test_scores = learning_curve(
-        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)
-    train_scores_mean = np.mean(train_scores, axis=1)
-    train_scores_std = np.std(train_scores, axis=1)
-    test_scores_mean = np.mean(test_scores, axis=1)
-    test_scores_std = np.std(test_scores, axis=1)
-    plt.grid()
-
-    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
-                     train_scores_mean + train_scores_std, alpha=0.1,
-                     color="r")
-    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
-                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
-    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
-             label="Training score")
-    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
-             label="Cross-validation score")
-
-    plt.legend(loc="best")
-    return plt
+from sklearn import preprocessing, cross_validation, metrics, svm, linear_model
+import tensorflow.contrib.learn.python.learn as learn
 
 """This method is purely for checking that the logic works"""
 def print_full(x):
@@ -123,32 +93,28 @@ def spread_conversion(x):
     else:
         return float(return_val)
 
-C_vec = [0.0001, 0.0003, 0.0006, 0.001, 0.003, 0.006, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1.0, 3.0, 6.0, 10.0]
-prob_val = 0
-C_val = 0
-
 # Read in csv table
 df = pd.read_csv('nflscraper/command_results.csv')
 
-# Calculate offensive efficiency (pass yards per attempt and rush yards per carry)
-home_pass_stats = pd.DataFrame(df['hpass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
-away_pass_stats = pd.DataFrame(df['apass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
-away_pass_stats.replace('neg7','-7',inplace=True)
-home_pass_stats['yards'] = home_pass_stats['yards'].astype(float)
-home_pass_stats['attempts'] = home_pass_stats['attempts'].astype(float)
-away_pass_stats['yards'] = away_pass_stats.yards.astype(float)
-away_pass_stats['attempts'] = away_pass_stats.attempts.astype(float)
+# # Calculate offensive efficiency (pass yards per attempt and rush yards per carry)
+# home_pass_stats = pd.DataFrame(df['hpass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
+# away_pass_stats = pd.DataFrame(df['apass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
+# away_pass_stats.replace('neg7','-7',inplace=True)
+# home_pass_stats['yards'] = home_pass_stats['yards'].astype(float)
+# home_pass_stats['attempts'] = home_pass_stats['attempts'].astype(float)
+# away_pass_stats['yards'] = away_pass_stats.yards.astype(float)
+# away_pass_stats['attempts'] = away_pass_stats.attempts.astype(float)
 
-df['home_pass'] = home_pass_stats['yards'] / home_pass_stats['attempts']
-df['away_pass'] = away_pass_stats['yards'] / away_pass_stats['attempts']
-del home_pass_stats, away_pass_stats
+# df['home_pass'] = home_pass_stats['yards'] / home_pass_stats['attempts']
+# df['away_pass'] = away_pass_stats['yards'] / away_pass_stats['attempts']
+# del home_pass_stats, away_pass_stats
 
-df['home_rush'].astype(float)
-df['hrush_att'].astype(float)
-df['away_rush'].astype(float)
-df['arush_att'].astype(float)
-df['home_rush'] = df['home_rush'] / df['hrush_att']
-df['away_rush'] = df['away_rush'] / df['arush_att']
+# df['home_rush'].astype(float)
+# df['hrush_att'].astype(float)
+# df['away_rush'].astype(float)
+# df['arush_att'].astype(float)
+# df['home_rush'] = df['home_rush'] / df['hrush_att']
+# df['away_rush'] = df['away_rush'] / df['arush_att']
 
 # Change the string date data in df to datetime format
 df['game_date'] = pd.to_datetime(df['game_date'],format='%Y-%m-%d')
@@ -202,8 +168,8 @@ predicting_set['vegasline'].replace('Pick','0')
 del week_dict, start_date, end_date, date_val, week_val
 
 # Manually call the names of the columns from the scraped data
-home_columns = ['home_four','home_oyds','home_pass','home_pens','home_poss','home_rush','home_sack','home_score','home_team','home_third','home_turn','hpens_yds','hsack_yds','hpass_tot','hrush_att']
-away_columns = ['apens_yds','asack_yds','away_four','away_oyds','away_pass','away_pens','away_poss','away_rush','away_sack','away_score','away_team','away_third','away_turn','apass_tot','arush_att']
+home_columns = ['home_four','home_oyds','home_pass','home_pens','home_poss','home_rush','home_sack','home_score','home_team','home_third','home_turn','hpens_yds','hsack_yds']#,'hpass_tot','hrush_att']
+away_columns = ['apens_yds','asack_yds','away_four','away_oyds','away_pass','away_pens','away_poss','away_rush','away_sack','away_score','away_team','away_third','away_turn']#,'apass_tot','arush_att']
 # Create a mapping to combine home and away columns
 home_cols = {'game week': 'game week', 'home_four': 'fourth down', 'home_oyds': 'total yards', 'home_pass': 'pass yards', 'home_pens': 'penalties', 'home_poss': 'possession', 'home_rush': 'rush yards',
              'home_sack': 'sacks', 'home_score': 'score', 'home_team': 'team', 'home_third': 'third down', 'home_turn': 'turnovers', 'hpens_yds': 'penalty yards', 'hsack_yds': 'sack yards',
@@ -214,12 +180,12 @@ away_cols = {'game week': 'game week', 'away_four': 'fourth down', 'away_oyds': 
 # Create only home and away dataframes
 away = predicting_set.drop(home_columns,axis=1)
 home = predicting_set.drop(away_columns,axis=1)
-away.drop('apass_tot',axis=1,inplace=True)
-away.drop('arush_att',axis=1,inplace=True)
-away.drop('away_oyds',axis=1,inplace=True)
-home.drop('hpass_tot',axis=1,inplace=True)
-home.drop('hrush_att',axis=1,inplace=True)
-home.drop('home_oyds',axis=1,inplace=True)
+# away.drop('apass_tot',axis=1,inplace=True)
+# away.drop('arush_att',axis=1,inplace=True)
+# away.drop('away_oyds',axis=1,inplace=True)
+# home.drop('hpass_tot',axis=1,inplace=True)
+# home.drop('hrush_att',axis=1,inplace=True)
+# home.drop('home_oyds',axis=1,inplace=True)
 
 # Create home and away scores which will be used to compare to the predicted value
 away_score = predicting_set[['away_score','week']]
@@ -373,57 +339,55 @@ df['rush_diff'] = df['home_rush'] - df['away_rush']
 X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 # X = df[['poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 
-# Create results vector (a home win = 1, a home loss or tie = 0)
-y = np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
-
-title = "Learning Curves (Simple Regression)"#, RBF kernel, $\gamma=0.001$)"
-# SVC is more expensive so we do a lower number of CV iterations:
-cv = cross_validation.ShuffleSplit(X.shape[0], n_iter=100,
-                                   test_size=0.2, random_state=0)
-estimator = linear_model.LogisticRegression(C=0.003)
-plot_learning_curve(estimator, title, X, y, cv=cv, n_jobs=4)
-
-plt.show()
 
 """ Train, test, and predict the algorithm """
 # Scale the sample data
 scaler = preprocessing.StandardScaler().fit(X)
 X = scaler.transform(X)
 
+# Create results vector (a home win = 1, a home loss or tie = 0)
+y = np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
+
 # Delete the dataframe to clear memory
 del df
 
 # Split out training and testing data sets
-X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
+X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2,random_state=42)
 
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week', 'home_team', 'away_team'], axis=1, inplace=True)
 
-for c in C_vec:
-    # Create the classifier and check the score
-    # clf = LogisticRegression()
-    clf = linear_model.LogisticRegression(C=c,random_state=42)
-    clf.fit(X_train, y_train)
+# Build 3 layer fully connected DNN with 50, 50, 50 units respectively.
+feature_columns = learn.infer_real_valued_columns_from_input(X_train)
+regressor = learn.DNNRegressor(feature_columns=feature_columns, hidden_units=[100, 100, 100])
 
-    # Calculate probabilities using the predict_proba method for logistic regression
-    probabilities = clf.predict_proba(scaler.transform(matchups))
+# Fit
+regressor.fit(X_train, y_train, steps=500)
 
-    # Vectorize the spread_conversion function and apply the function to the probabilities result vector
-    vfunc = np.vectorize(spread_conversion)
-    predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,0])
+# Predict and score
+y_predicted = list(regressor.predict(x=scaler.transform(matchups), as_iterable=True))
 
-    # If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
-    bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
+print y_predicted
+raw_input
 
-    # Check to see where the bet_vector equals the actual game result with the spread included
-    result = np.array(np.where(bet_vector == game_result,1,0))
+min_val = min(y_predicted)
+max_val = max(y_predicted)
+y_predicted = (y_predicted - min_val) / (max_val - min_val)
 
-    prob_result = float(np.sum(result)) / len(result)
+vfunc = np.vectorize(spread_conversion)
+predicted_spreads = np.apply_along_axis(vfunc,0,y_predicted)
 
-    print 'C =',c,'  Percent correct =',prob_result
+bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
 
-    if prob_result > prob_val:
-        prob_val = prob_result
-        C_val = c
+result = np.array(np.where(bet_vector == game_result,1,0))
 
-print prob_val, C_val
+prob_result = float(np.sum(result)) / len(result)
+
+print prob_result
+
+raw_input()
+print result
+print game_result
+score = metrics.mean_squared_error(result, game_result)
+
+print('MSE: {0:f}'.format(score))

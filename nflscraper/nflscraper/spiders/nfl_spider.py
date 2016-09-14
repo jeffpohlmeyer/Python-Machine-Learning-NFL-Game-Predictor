@@ -85,6 +85,12 @@ class NFLScraperSpider(scrapy.Spider):
 		arush = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[2]/td[1]/text()').extract()[0]
 		arush = arush[arush.find("-")+1:]
 		item['away_rush'] = arush[:arush.find("-")]
+
+		# Rush attempts extracted from total rushing values
+		hrush = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[2]/td[2]/text()').extract()[0]
+		item['hrush_att'] = hrush[:hrush.find("-")]
+		arush = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[2]/td[1]/text()').extract()[0]
+		item['arush_att'] = arush[:arush.find("-")]
 		
 		# Total sacks and sack yards
 		hsack = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[4]/td[2]/text()').extract()[0]
@@ -97,6 +103,10 @@ class NFLScraperSpider(scrapy.Spider):
 		# Net passing yards (total passing yards minus yards sacked)
 		item['home_pass'] = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[5]/td[2]/text()').extract()[0]
 		item['away_pass'] = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[5]/td[1]/text()').extract()[0]
+
+		# Total pass stats
+		item['hpass_tot'] = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[3]/td[2]/text()').extract()[0]
+		item['apass_tot'] = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[3]/td[1]/text()').extract()[0]
 		
 		# Turnovers
 		item['home_turn'] = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[8]/td[2]/text()').extract()[0]

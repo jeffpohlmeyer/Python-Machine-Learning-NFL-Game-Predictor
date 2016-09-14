@@ -2,6 +2,37 @@ import pandas as pd
 import datetime
 import numpy as np
 from sklearn import preprocessing, cross_validation, svm, linear_model
+import matplotlib.pyplot as plt
+from sklearn.learning_curve import learning_curve
+
+"""Found at http://scikit-learn.org/stable/auto_examples/model_selection/plot_learning_curve.html"""
+def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5)):
+    plt.figure()
+    plt.title(title)
+    if ylim is not None:
+        plt.ylim(*ylim)
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    plt.grid()
+
+    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.1,
+                     color="r")
+    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+             label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+             label="Cross-validation score")
+
+    plt.legend(loc="best")
+    return plt
 
 """This method is purely for checking that the logic works"""
 def print_full(x):
@@ -16,6 +47,26 @@ alpha_val = 0
 
 # Read in csv table
 df = pd.read_csv('nflscraper/command_results.csv')
+
+# Calculate offensive efficiency (pass yards per attempt and rush yards per carry)
+home_pass_stats = pd.DataFrame(df['hpass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
+away_pass_stats = pd.DataFrame(df['apass_tot'].str.split('-').tolist(),columns="completions attempts yards touchdowns interceptions".split())
+away_pass_stats.replace('neg7','-7',inplace=True)
+home_pass_stats['yards'] = home_pass_stats['yards'].astype(float)
+home_pass_stats['attempts'] = home_pass_stats['attempts'].astype(float)
+away_pass_stats['yards'] = away_pass_stats.yards.astype(float)
+away_pass_stats['attempts'] = away_pass_stats.attempts.astype(float)
+
+df['home_pass'] = home_pass_stats['yards'] / home_pass_stats['attempts']
+df['away_pass'] = away_pass_stats['yards'] / away_pass_stats['attempts']
+del home_pass_stats, away_pass_stats
+
+df['home_rush'].astype(float)
+df['hrush_att'].astype(float)
+df['away_rush'].astype(float)
+df['arush_att'].astype(float)
+df['home_rush'] = df['home_rush'] / df['hrush_att']
+df['away_rush'] = df['away_rush'] / df['arush_att']
 
 # Change the string date data in df to datetime format
 df['game_date'] = pd.to_datetime(df['game_date'],format='%Y-%m-%d')
@@ -69,8 +120,8 @@ predicting_set['vegasline'].replace('Pick','0')
 del week_dict, start_date, end_date, date_val, week_val
 
 # Manually call the names of the columns from the scraped data
-home_columns = ['home_four','home_oyds','home_pass','home_pens','home_poss','home_rush','home_sack','home_score','home_team','home_third','home_turn','hpens_yds','hsack_yds']
-away_columns = ['apens_yds','asack_yds','away_four','away_oyds','away_pass','away_pens','away_poss','away_rush','away_sack','away_score','away_team','away_third','away_turn']
+home_columns = ['home_four','home_oyds','home_pass','home_pens','home_poss','home_rush','home_sack','home_score','home_team','home_third','home_turn','hpens_yds','hsack_yds','hpass_tot','hrush_att']
+away_columns = ['apens_yds','asack_yds','away_four','away_oyds','away_pass','away_pens','away_poss','away_rush','away_sack','away_score','away_team','away_third','away_turn','apass_tot','arush_att']
 # Create a mapping to combine home and away columns
 home_cols = {'game week': 'game week', 'home_four': 'fourth down', 'home_oyds': 'total yards', 'home_pass': 'pass yards', 'home_pens': 'penalties', 'home_poss': 'possession', 'home_rush': 'rush yards',
              'home_sack': 'sacks', 'home_score': 'score', 'home_team': 'team', 'home_third': 'third down', 'home_turn': 'turnovers', 'hpens_yds': 'penalty yards', 'hsack_yds': 'sack yards',
@@ -81,6 +132,12 @@ away_cols = {'game week': 'game week', 'away_four': 'fourth down', 'away_oyds': 
 # Create only home and away dataframes
 away = predicting_set.drop(home_columns,axis=1)
 home = predicting_set.drop(away_columns,axis=1)
+away.drop('apass_tot',axis=1,inplace=True)
+away.drop('arush_att',axis=1,inplace=True)
+away.drop('away_oyds',axis=1,inplace=True)
+home.drop('hpass_tot',axis=1,inplace=True)
+home.drop('hrush_att',axis=1,inplace=True)
+home.drop('home_oyds',axis=1,inplace=True)
 
 # Create home and away scores which will be used to compare to the predicted value
 away_score = predicting_set[['away_score','week']]
@@ -234,13 +291,22 @@ df['rush_diff'] = df['home_rush'] - df['away_rush']
 X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 # X = df[['poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 
+# Create results vector (a home win = 1, a home loss or tie = 0)
+y = df['away_score'] - df['home_score']#np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
+
+title = "Learning Curves (Lasso)"#, RBF kernel, $\gamma=0.001$)"
+# SVC is more expensive so we do a lower number of CV iterations:
+cv = cross_validation.ShuffleSplit(X.shape[0], n_iter=100,
+                                   test_size=0.2, random_state=0)
+estimator = linear_model.Lasso(alpha=10,selection='random',random_state=42)
+plot_learning_curve(estimator, title, X, y, cv=cv, n_jobs=4)
+
+plt.show()
+
 """ Train, test, and predict the algorithm """
 # Scale the sample data
 scaler = preprocessing.StandardScaler().fit(X)
 X = scaler.transform(X)
-
-# Create results vector (a home win = 1, a home loss or tie = 0)
-y = df['away_score'] - df['home_score']#np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
 
 # Delete the dataframe to clear memory
 del df
@@ -254,7 +320,7 @@ matchups.drop(['week', 'home_team', 'away_team'], axis=1, inplace=True)
 for alph in alphas:
     # Create the regression model and check the score
     # clf = LogisticRegression()
-    clf = linear_model.Lasso(alpha=alph,selection='random',random_state=2)
+    clf = linear_model.Lasso(alpha=alph,selection='random',random_state=42)
     clf.fit(X_train, y_train)
     accuracy = clf.score(X_test,y_test)
 
