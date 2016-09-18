@@ -4,7 +4,7 @@ import numpy as np
 from sklearn import preprocessing, cross_validation, svm, linear_model
 import matplotlib.pyplot as plt
 from sklearn.learning_curve import learning_curve
-from sklearn.feature_selection import RFECV
+from sklearn.feature_selection import RFE, RFECV
 
 """Found at http://scikit-learn.org/stable/auto_examples/model_selection/plot_learning_curve.html"""
 def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5)):
@@ -405,49 +405,40 @@ X = scaler.transform(X)
 del df
 
 # Split out training and testing data sets
-# X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
+X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
 
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week', 'home_team', 'away_team'], axis=1, inplace=True)
 
-# for feat in range(1,len(matchups.columns)):
-for c in C_vec:
-    # Create the classifier and check the score
-    # clf = LogisticRegression()
-    clf = linear_model.LogisticRegression(C=c,random_state=42)
-    selector = RFECV(clf)
-    selector = selector.fit(X,y)
+for feat in range(1,len(matchups.columns)):
+    for c in C_vec:
+        # Create the classifier and check the score
+        # clf = LogisticRegression()
+        clf = linear_model.LogisticRegression(C=c,random_state=42)
+        selector = RFE(clf)
+        selector = selector.fit(X_train,y_train)
 
-    # clf.fit(X_train, y_train)
+        # Calculate probabilities using the predict_proba method for logistic regression
+        probabilities = selector.predict_proba(scaler.transform(matchups))
 
-    # print 'pause'
-    # raw_input()
+        # Vectorize the spread_conversion function and apply the function to the probabilities result vector
+        vfunc = np.vectorize(spread_conversion)
+        predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,0])
 
-    # Calculate probabilities using the predict_proba method for logistic regression
-    # probabilities = clf.predict_proba(scaler.transform(matchups))
-    # cols = list(np.array(np.where(selector.ranking_>1)))
-    # matchups = matchups.drop(matchups.columns[cols],axis=1)
-    # matchups = selector.fit_transform(matchups,y=None)
-    probabilities = selector.predict_proba(scaler.transform(matchups))
-    # print probabilities
+        # If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
+        bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
 
-    # Vectorize the spread_conversion function and apply the function to the probabilities result vector
-    vfunc = np.vectorize(spread_conversion)
-    predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,0])
+        # Check to see where the bet_vector equals the actual game result with the spread included
+        result = np.array(np.where(bet_vector == game_result,1,0))
 
-    # If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
-    bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
+        prob_result = float(np.sum(result)) / len(result)
 
-    # Check to see where the bet_vector equals the actual game result with the spread included
-    result = np.array(np.where(bet_vector == game_result,1,0))
+        print 'Number of features =', feat, 'C =',c,'  Percent correct =',prob_result
 
-    prob_result = float(np.sum(result)) / len(result)
+        if prob_result > prob_val:
+            prob_val = prob_result
+            C_val = c
+            feat_val = feat
 
-    print 'C =',c,'  Percent correct =',prob_result#, 'Number of features = ', feat
-
-    if prob_result > prob_val:
-        prob_val = prob_result
-        C_val = c
-        # feat_val = feat
-
-print prob_val, C_val#, feat
+print 'Score =',selector.score(X_test,y_test)
+print prob_val, C_val, feat
