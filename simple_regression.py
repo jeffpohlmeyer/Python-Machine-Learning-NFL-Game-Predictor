@@ -4,6 +4,7 @@ import numpy as np
 from sklearn import preprocessing, cross_validation, svm, linear_model
 import matplotlib.pyplot as plt
 from sklearn.learning_curve import learning_curve
+from sklearn.feature_selection import RFECV
 
 """Found at http://scikit-learn.org/stable/auto_examples/model_selection/plot_learning_curve.html"""
 def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5)):
@@ -284,7 +285,9 @@ for week in range(5,22):
         total_stats = total_stats.append(weekly_stats)
 
 # Create the needed columns for the eventual prediction
-matchup_columns = ['week','home_team','away_team', 'sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']
+matchup_columns = ['week','home_team','away_team', 'sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff', 'fourth_diff']
+# matchup_columns = ['week','home_team','away_team', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']
+
 # Create the DataFrame and pull in the 'week' 'home_team' and 'away_team columns
 matchups = pd.DataFrame(columns = matchup_columns)
 matchups[['week','home_team','away_team']] = predicting_set[['week','home_team','away_team']]
@@ -333,6 +336,11 @@ for row in range(len(matchups)):
     a_third = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['third down'].values[0]
     matchups.ix[row, 'third_diff'] = h_third - a_third
 
+    # fourth_diff
+    h_fourth = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['fourth down'].values[0]
+    a_fourth = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['fourth down'].values[0]
+    matchups.ix[row, 'fourth_diff'] = h_fourth - a_fourth
+
     # turn_diff
     h_turn = total_stats[((total_stats.index.values == h_team) & (total_stats.week == week))]['turnovers'].values[0]
     a_turn = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['turnovers'].values[0]
@@ -350,6 +358,9 @@ df['poss_diff'] = df['home_poss'] - df['away_poss']
 
 # Calculate third down percentage differential
 df['third_diff'] = df['home_third'] - df['away_third']
+
+# Calculate third down percentage differential
+df['fourth_diff'] = df['home_four'] - df['away_four']
 
 # Calculate turnover differential
 df['turn_diff'] = df['home_turn'] - df['away_turn']
@@ -370,20 +381,20 @@ df['pass_diff'] = df['home_pass'] - df['away_pass']
 df['rush_diff'] = df['home_rush'] - df['away_rush']
 
 # Create a sample set to pass into the machine learning algorithm
-X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
+X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff', 'fourth_diff']].copy()
 # X = df[['poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
 
 # Create results vector (a home win = 1, a home loss or tie = 0)
 y = np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
 
-title = "Learning Curves (Simple Regression)"#, RBF kernel, $\gamma=0.001$)"
-# SVC is more expensive so we do a lower number of CV iterations:
-cv = cross_validation.ShuffleSplit(X.shape[0], n_iter=100,
-                                   test_size=0.2, random_state=0)
-estimator = linear_model.LogisticRegression(C=0.003)
-plot_learning_curve(estimator, title, X, y, cv=cv, n_jobs=4)
+# title = "Learning Curves (Simple Regression)"#, RBF kernel, $\gamma=0.001$)"
+# # SVC is more expensive so we do a lower number of CV iterations:
+# cv = cross_validation.ShuffleSplit(X.shape[0], n_iter=100,
+#                                    test_size=0.2, random_state=0)
+# estimator = linear_model.LogisticRegression(C=0.003)
+# plot_learning_curve(estimator, title, X, y, cv=cv, n_jobs=4)
 
-plt.show()
+# plt.show()
 
 """ Train, test, and predict the algorithm """
 # Scale the sample data
@@ -394,19 +405,31 @@ X = scaler.transform(X)
 del df
 
 # Split out training and testing data sets
-X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
+# X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
 
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week', 'home_team', 'away_team'], axis=1, inplace=True)
 
+# for feat in range(1,len(matchups.columns)):
 for c in C_vec:
     # Create the classifier and check the score
     # clf = LogisticRegression()
     clf = linear_model.LogisticRegression(C=c,random_state=42)
-    clf.fit(X_train, y_train)
+    selector = RFECV(clf)
+    selector = selector.fit(X,y)
+
+    # clf.fit(X_train, y_train)
+
+    # print 'pause'
+    # raw_input()
 
     # Calculate probabilities using the predict_proba method for logistic regression
-    probabilities = clf.predict_proba(scaler.transform(matchups))
+    # probabilities = clf.predict_proba(scaler.transform(matchups))
+    # cols = list(np.array(np.where(selector.ranking_>1)))
+    # matchups = matchups.drop(matchups.columns[cols],axis=1)
+    # matchups = selector.fit_transform(matchups,y=None)
+    probabilities = selector.predict_proba(scaler.transform(matchups))
+    # print probabilities
 
     # Vectorize the spread_conversion function and apply the function to the probabilities result vector
     vfunc = np.vectorize(spread_conversion)
@@ -420,10 +443,11 @@ for c in C_vec:
 
     prob_result = float(np.sum(result)) / len(result)
 
-    print 'C =',c,'  Percent correct =',prob_result
+    print 'C =',c,'  Percent correct =',prob_result#, 'Number of features = ', feat
 
     if prob_result > prob_val:
         prob_val = prob_result
         C_val = c
+        # feat_val = feat
 
-print prob_val, C_val
+print prob_val, C_val#, feat
