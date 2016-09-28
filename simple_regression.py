@@ -5,6 +5,9 @@ from sklearn import preprocessing, cross_validation, svm, linear_model
 import matplotlib.pyplot as plt
 from sklearn.learning_curve import learning_curve
 from sklearn.feature_selection import RFE, RFECV
+import os
+
+os.system('clear')
 
 """Found at http://scikit-learn.org/stable/auto_examples/model_selection/plot_learning_curve.html"""
 def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5)):
@@ -154,7 +157,6 @@ df['away_rush'] = df['away_rush'] / df['arush_att']
 # Change the string date data in df to datetime format
 df['game_date'] = pd.to_datetime(df['game_date'],format='%Y-%m-%d')
 
-
 """ Create home time of possession differential """
 # Convert objects to datetime values
 df['home_poss'] = pd.to_datetime(df['home_poss'],format='%M:%S')
@@ -171,9 +173,8 @@ df['home_poss'] = df['home_poss'] / df['total_poss']
 df['away_poss'] = df['away_poss'] / df['total_poss']
 df.drop('total_poss',axis = 1, inplace=True)    # Delete total possession column as it's no longer needed
 
-
 """ Set date after which you don't want to use data to train classifier """
-cutoff_date = datetime.date(2015, 8, 1)
+cutoff_date = datetime.date(2016, 8, 1)
 
 """ Creating prediction dataset """
 # Create dataset to be used for prediction
@@ -188,17 +189,17 @@ date_val = start_date                           # date_val is the value used to 
 week_val = 1                                    # week_val is the iterating value that tracks the "current" week
 week_dict={}                                    # Create an empty dictionary
 # Cycle through the number of days
-for _ in range((end_date - start_date).days):
+for _ in range((end_date - start_date).days+1):
     if date_val.weekday() == 1:                 # Check if the weekday value is a Tuesday
         week_val += 1                           # Increment since I'm considering Tuesday to start a new week
     week_dict[date_val] = week_val              # Update the dictionary value for the "current" date
     date_val += datetime.timedelta(days=1)      # Increment date_val by one day
-week_dict[datetime.date(2016,2,7)] = 21         # This is manually done since there are two weeks between conf championships and the final game
+# week_dict[datetime.date(2016,2,7)] = 21         # This is manually done since there are two weeks between conf championships and the final game
 
 # Update the week column in the dataframe with the dictionary values and then delete the dictionary and its components used to create it
 predicting_set['week'].update(pd.Series(week_dict))
 
-predicting_set['vegasline'].replace('Pick','0')
+predicting_set['vegasline'].replace('Pick','0',inplace=True)
 
 del week_dict, start_date, end_date, date_val, week_val
 
@@ -226,8 +227,8 @@ home.drop('home_oyds',axis=1,inplace=True)
 away_score = predicting_set[['away_score','week']]
 home_score = predicting_set[['home_score','week']]
 # Remove all games not included in the prediction
-away_score = away_score[away_score.week >= 5]
-home_score = home_score[home_score.week >= 5]
+away_score = away_score[away_score.week >= 3]
+home_score = home_score[home_score.week >= 3]
 # Drop the 'week' column as it is no longer needed
 away_score.drop('week',axis=1,inplace=True)
 home_score.drop('week',axis=1,inplace=True)
@@ -243,8 +244,9 @@ away_score.sort_index(inplace=True)
 home_score.sort_index(inplace=True)
 
 # Pull the actual spreads from the scraped data
-spreads = home[home['week'] >= 5]
+spreads = home[home['week'] >= 3]
 spreads = spreads['spread'].str.split().str[-1]
+
 spreads = pd.to_numeric(spreads)
 
 home.drop(['spread','total score'],axis=1,inplace=True)
@@ -260,7 +262,7 @@ total_set = home.append(away)
 team_list = total_set['team'].unique()
 
 # This loop will pull in all data and calculate running averages
-for week in range(5,22):
+for week in range(3,4):
     # Initialize a "temporary" dataframe for each loop
     weekly_stats = pd.DataFrame(columns=total_set.columns.values)
     # Iterate through each team in the list
@@ -278,7 +280,7 @@ for week in range(5,22):
     weekly_stats['week'] = week
 
     # The "total_stats" set is created from weekly_stats in order to have the same column values, and only needs to be done for the first week
-    if week == 5:
+    if week == 3:
         total_stats = weekly_stats
     # For all other weeks simply append the "temporary" values
     else:
@@ -293,7 +295,7 @@ matchups = pd.DataFrame(columns = matchup_columns)
 matchups[['week','home_team','away_team']] = predicting_set[['week','home_team','away_team']]
 
 # Remove any results from the first four weeks
-matchups = matchups[matchups.week >= 5]
+matchups = matchups[matchups.week >= 3]
 
 # Create the actual differential values using averages from each week
 for row in range(len(matchups)):
@@ -387,15 +389,6 @@ X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn
 # Create results vector (a home win = 1, a home loss or tie = 0)
 y = np.array(np.where(df['home_score'] > df['away_score'], 1, 0))
 
-# title = "Learning Curves (Simple Regression)"#, RBF kernel, $\gamma=0.001$)"
-# # SVC is more expensive so we do a lower number of CV iterations:
-# cv = cross_validation.ShuffleSplit(X.shape[0], n_iter=100,
-#                                    test_size=0.2, random_state=0)
-# estimator = linear_model.LogisticRegression(C=0.003)
-# plot_learning_curve(estimator, title, X, y, cv=cv, n_jobs=4)
-
-# plt.show()
-
 """ Train, test, and predict the algorithm """
 # Scale the sample data
 scaler = preprocessing.StandardScaler().fit(X)
@@ -406,6 +399,8 @@ del df
 
 # Split out training and testing data sets
 X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
+
+print matchups['home_team']
 
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week', 'home_team', 'away_team'], axis=1, inplace=True)
@@ -433,7 +428,7 @@ for feat in range(1,len(matchups.columns)):
 
         prob_result = float(np.sum(result)) / len(result)
 
-        print 'Number of features =', feat, 'C =',c,'  Percent correct =',prob_result
+        # print 'Number of features =', feat, 'C =',c,'  Percent correct =',prob_result
 
         if prob_result > prob_val:
             prob_val = prob_result
@@ -441,4 +436,14 @@ for feat in range(1,len(matchups.columns)):
             feat_val = feat
 
 print 'Score =',selector.score(X_test,y_test)
-print prob_val, C_val, feat
+# print prob_val, C_val, feat
+
+clf = linear_model.LogisticRegression(C=C_val,random_state=42)
+clf = clf.fit(X_train,y_train)
+probabilities = clf.predict_proba(scaler.transform(matchups))
+vfunc = np.vectorize(spread_conversion)
+predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,0])
+bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
+print spreads
+print predicted_spreads
+print bet_vector
