@@ -251,6 +251,8 @@ for week in range(5,22):
 
 # Create the needed columns for the eventual prediction
 matchup_columns = ['week','home_team','away_team', 'sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']
+# matchup_columns = ['week','home_team','away_team', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']
+
 # Create the DataFrame and pull in the 'week' 'home_team' and 'away_team columns
 matchups = pd.DataFrame(columns = matchup_columns)
 matchups[['week','home_team','away_team']] = predicting_set[['week','home_team','away_team']]
