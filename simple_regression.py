@@ -227,8 +227,8 @@ home.drop('home_oyds',axis=1,inplace=True)
 away_score = predicting_set[['away_score','week']]
 home_score = predicting_set[['home_score','week']]
 # Remove all games not included in the prediction
-away_score = away_score[away_score.week >= 3]
-home_score = home_score[home_score.week >= 3]
+away_score = away_score[away_score.week >= 4]
+home_score = home_score[home_score.week >= 4]
 # Drop the 'week' column as it is no longer needed
 away_score.drop('week',axis=1,inplace=True)
 home_score.drop('week',axis=1,inplace=True)
@@ -244,7 +244,7 @@ away_score.sort_index(inplace=True)
 home_score.sort_index(inplace=True)
 
 # Pull the actual spreads from the scraped data
-spreads = home[home['week'] >= 3]
+spreads = home[home['week'] >= 4]
 spreads = spreads['spread'].str.split().str[-1]
 
 spreads = pd.to_numeric(spreads)
@@ -262,7 +262,7 @@ total_set = home.append(away)
 team_list = total_set['team'].unique()
 
 # This loop will pull in all data and calculate running averages
-for week in range(3,4):
+for week in range(4,5):
     # Initialize a "temporary" dataframe for each loop
     weekly_stats = pd.DataFrame(columns=total_set.columns.values)
     # Iterate through each team in the list
@@ -280,7 +280,7 @@ for week in range(3,4):
     weekly_stats['week'] = week
 
     # The "total_stats" set is created from weekly_stats in order to have the same column values, and only needs to be done for the first week
-    if week == 3:
+    if week == 4:
         total_stats = weekly_stats
     # For all other weeks simply append the "temporary" values
     else:
@@ -295,7 +295,7 @@ matchups = pd.DataFrame(columns = matchup_columns)
 matchups[['week','home_team','away_team']] = predicting_set[['week','home_team','away_team']]
 
 # Remove any results from the first four weeks
-matchups = matchups[matchups.week >= 3]
+matchups = matchups[matchups.week >= 4]
 
 # Create the actual differential values using averages from each week
 for row in range(len(matchups)):
@@ -404,6 +404,18 @@ print matchups['home_team']
 
 # Remove the 'week' 'home_team' and 'away_team' columns from matchups as they are not used in the algorithm
 matchups.drop(['week', 'home_team', 'away_team'], axis=1, inplace=True)
+
+
+
+
+
+
+'''You'll likely want to use the a pickled model from previous regression predicting 2015 results'''
+
+
+
+
+
 
 for feat in range(1,len(matchups.columns)):
     for c in C_vec:
