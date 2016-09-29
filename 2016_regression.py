@@ -175,6 +175,7 @@ df['away_poss'] = df['away_poss'] / df['total_poss']
 df.drop('total_poss',axis = 1, inplace=True)    # Delete total possession column as it's no longer needed
 
 """ Set date after which you don't want to use data to train classifier """
+scaling_cutoff_date = datetime.date(2015, 8, 1)
 cutoff_date = datetime.date(2016, 8, 1)
 
 """ Creating prediction dataset """
@@ -383,6 +384,8 @@ df['pass_diff'] = df['home_pass'] - df['away_pass']
 # Calculate rushing yardage differential
 df['rush_diff'] = df['home_rush'] - df['away_rush']
 
+df = df[df.game_date < scaling_cutoff_date]
+
 # Create a sample set to pass into the machine learning algorithm
 X = df[['sack_diff', 'sack_ydiff', 'pens_diff', 'poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff', 'fourth_diff']].copy()
 # X = df[['poss_diff', 'third_diff', 'turn_diff', 'pass_diff', 'rush_diff']].copy()
@@ -400,7 +403,6 @@ del df
 
 # Split out training and testing data sets
 X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
-
 
 pickle_in = open('NFL Regressor Official.pickle','rb')
 loaded_model = pickle.load(pickle_in)
