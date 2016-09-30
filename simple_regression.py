@@ -252,9 +252,6 @@ spreads = pd.to_numeric(spreads)
 home.drop(['spread','total score'],axis=1,inplace=True)
 away.drop(['spread','total score'],axis=1,inplace=True)
 
-# Create the actual result vector where a tie counts as a loss for the home team
-game_result = np.array(np.where(home_score.ix[:,0] + spreads[:] > away_score.ix[:,0], 1, 0))
-
 # Group both home and away stats into one dataframe
 total_set = home.append(away)
 
@@ -434,6 +431,9 @@ for feat in range(1,len(matchups.columns)):
 
         # If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
         bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
+
+        # Create the actual result vector where a tie counts as a loss for the home team
+        game_result = np.array(np.where(home_score.ix[:,0] + predicted_spreads[:] > away_score.ix[:,0], 1, 0))
 
         # Check to see where the bet_vector equals the actual game result with the spread included
         result = np.array(np.where(bet_vector == game_result,1,0))
