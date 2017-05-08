@@ -11,28 +11,29 @@ import scrapy
 from scrapy import Selector
 from nflscraper.items import NflscraperItem
 from datetime import date
+import numpy as np
 
 class NFLScraperSpider(scrapy.Spider):
 	name = "pfr"
 	allowed_domains = ['pro-football-reference.com']
 	def start_requests(self):
 		yield scrapy.Request("http://www.pro-football-reference.com/years/2016/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2015/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2014/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2013/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2012/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2011/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2010/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2009/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2008/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2007/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2006/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2005/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2004/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2003/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2002/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2001/games.htm", self.parse)
-		# yield scrapy.Request("http://www.pro-football-reference.com/years/2000/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2015/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2014/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2013/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2012/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2011/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2010/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2009/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2008/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2007/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2006/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2005/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2004/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2003/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2002/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2001/games.htm", self.parse)
+		yield scrapy.Request("http://www.pro-football-reference.com/years/2000/games.htm", self.parse)
 
 	def parse(self,response):
 		for href in response.xpath('//a[contains(text(),"boxscore")]/@href'):
@@ -63,12 +64,13 @@ class NFLScraperSpider(scrapy.Spider):
 		item['game_date'] = date(year,month,day)
 		
 		# Team names
-		item['home_team'] = response.xpath('//*[@id="content"]/table/tbody/tr[2]/td[2]/a/text()').extract()[0]
-		item['away_team'] = response.xpath('//*[@id="content"]/table/tbody/tr[1]/td[2]/a/text()').extract()[0]
+		item['home_team'] = response.xpath('//*[@id="content"]/div[3]/table/tbody/tr[2]/td[2]/a/text()').extract()[0]
+		item['away_team'] = response.xpath('//*[@id="content"]/div[3]/table/tbody/tr[1]/td[2]/a/text()').extract()[0]
+
 		
 		# Scores
-		item['home_score'] = response.xpath('//*[@id="content"]/table/tbody/tr[2]/td[last()]/text()').extract()[0]
-		item['away_score'] = response.xpath('//*[@id="content"]/table/tbody/tr[1]/td[last()]/text()').extract()[0]
+		item['home_score'] = response.xpath('//*[@id="content"]/div[3]/table/tbody/tr[2]/td[last()]/text()').extract()[0]
+		item['away_score'] = response.xpath('//*[@id="content"]/div[3]/table/tbody/tr[1]/td[last()]/text()').extract()[0]
 		
 		# Vegas info
 		item['vegasline'] = game_info_selector.xpath('//*[@id="game_info"]//td/text()').extract()[-2]
@@ -124,21 +126,33 @@ class NFLScraperSpider(scrapy.Spider):
 		hthird = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[10]/td[2]/text()').extract()[0]
 		hthirdconv = float(hthird[:hthird.find("-")])
 		hthirdatt = float(hthird[hthird.find("-")+1:])
-		item['home_third'] = hthirdconv / hthirdatt
+		try:
+			item['home_third'] = hthirdconv / hthirdatt
+		except Exception as e:
+			item['home_third'] = np.nan
 		athird = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[10]/td[1]/text()').extract()[0]
 		athirdconv = float(athird[:athird.find("-")])
 		athirdatt = float(athird[athird.find("-")+1:])
-		item['away_third'] = athirdconv / athirdatt
+		try:
+			item['away_third'] = athirdconv / athirdatt
+		except Exception as e:
+			item['away_third'] = np.nan
 		
 		# Fourth down conversion rate
-		hfour = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[10]/td[2]/text()').extract()[0]
+		hfour = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[11]/td[2]/text()').extract()[0]
 		hfourconv = float(hfour[:hfour.find("-")])
 		hfouratt = float(hfour[hfour.find("-")+1:])
-		item['home_four'] = hfourconv / hfouratt
-		afour = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[10]/td[1]/text()').extract()[0]
+		try:
+			item['home_four'] = hfourconv / hfouratt
+		except Exception as e:
+			item['home_four'] = np.nan
+		afour = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[11]/td[1]/text()').extract()[0]
 		afourconv = float(afour[:afour.find("-")])
 		afouratt = float(afour[afour.find("-")+1:])
-		item['away_four'] = afourconv / afouratt
+		try:
+			item['away_four'] = afourconv / afouratt
+		except Exception as e:
+			item['away_four'] = np.nan
 		
 		# Time of possession
 		item['home_poss'] = team_stats_selector.xpath('//*[@id="team_stats"]/tbody/tr[12]/td[2]/text()').extract()[0]

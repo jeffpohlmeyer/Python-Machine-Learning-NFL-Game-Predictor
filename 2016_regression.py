@@ -225,12 +225,14 @@ home.drop('hpass_tot',axis=1,inplace=True)
 home.drop('hrush_att',axis=1,inplace=True)
 home.drop('home_oyds',axis=1,inplace=True)
 
+current_week = int(max(home['week']))
+
 # Create home and away scores which will be used to compare to the predicted value
 away_score = predicting_set[['away_score','week']]
 home_score = predicting_set[['home_score','week']]
 # Remove all games not included in the prediction
-away_score = away_score[away_score.week >= 5]
-home_score = home_score[home_score.week >= 5]
+away_score = away_score[away_score.week >= current_week]
+home_score = home_score[home_score.week >= current_week]
 # Drop the 'week' column as it is no longer needed
 away_score.drop('week',axis=1,inplace=True)
 home_score.drop('week',axis=1,inplace=True)
@@ -246,7 +248,7 @@ away_score.sort_index(inplace=True)
 home_score.sort_index(inplace=True)
 
 # Pull the actual spreads from the scraped data
-spreads = home[home['week'] >= 5]
+spreads = home[home['week'] >= current_week]
 spreads = spreads['spread'].str.split().str[-1]
 
 spreads = pd.to_numeric(spreads)
@@ -264,7 +266,7 @@ total_set = home.append(away)
 team_list = total_set['team'].unique()
 
 # This loop will pull in all data and calculate running averages
-for week in range(5,6):
+for week in range(current_week,current_week + 1):
     # Initialize a "temporary" dataframe for each loop
     weekly_stats = pd.DataFrame(columns=total_set.columns.values)
     # Iterate through each team in the list
@@ -282,7 +284,7 @@ for week in range(5,6):
     weekly_stats['week'] = week
 
     # The "total_stats" set is created from weekly_stats in order to have the same column values, and only needs to be done for the first week
-    if week == 5:
+    if week == current_week:
         total_stats = weekly_stats
     # For all other weeks simply append the "temporary" values
     else:
@@ -297,7 +299,7 @@ matchups = pd.DataFrame(columns = matchup_columns)
 matchups[['week','home_team','away_team']] = predicting_set[['week','home_team','away_team']]
 
 # Remove any results from the first four weeks
-matchups = matchups[matchups.week >= 5]
+matchups = matchups[matchups.week >= current_week]
 
 # Create the actual differential values using averages from each week
 for row in range(len(matchups)):
