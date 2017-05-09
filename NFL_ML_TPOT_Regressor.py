@@ -1,6 +1,6 @@
 import numpy as np
 
-from sklearn.decomposition import PCA
+from sklearn.decomposition import FastICA
 from sklearn.linear_model import LassoLarsCV
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
@@ -12,7 +12,7 @@ training_features, testing_features, training_classes, testing_classes = \
     train_test_split(features, tpot_data['class'], random_state=42)
 
 exported_pipeline = make_pipeline(
-    PCA(iterated_power=9, svd_solver="randomized"),
+    FastICA(),
     LassoLarsCV(normalize=False)
 )
 
