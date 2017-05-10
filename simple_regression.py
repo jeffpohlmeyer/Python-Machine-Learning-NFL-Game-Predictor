@@ -274,6 +274,13 @@ def prediction_set(df,cutoff_date):
 	# Create dataset to be used for prediction
 	predicting_set = df[df.game_date >= cutoff_date].set_index('game_date')
 	predicting_set = predicting_set.sort_index()	# Sort ascending by index
+	results = predicting_set.copy()
+	columns = results.columns
+	results['Spread'] = 0
+	results['Predicted Spread'] = 0
+	results['Scores'] = 0
+	results.drop(columns,axis=1,inplace=True)
+	results.reset_index(inplace=True)
 	predicting_set['week'] = np.nan # Create column indicating which game week the team is in
 
 	# Populating the week column of predicting_set
@@ -336,7 +343,9 @@ def prediction_set(df,cutoff_date):
 	away_score.sort_index(inplace=True)
 	home_score.sort_index(inplace=True)
 
-	score = home_score['home_score'] - away_score['away_score']
+	scores = home_score['home_score'] - away_score['away_score']
+	scores = scores.reset_index()
+	results['Scores'] = scores.reset_index()[0]
 
 	# Pull the actual spreads from the scraped data
 	spreads = home[home['week'] >= 4]
@@ -344,6 +353,7 @@ def prediction_set(df,cutoff_date):
 	home_spread = np.where(spreads['team'].str.split() == spreads['spread'].str.split().str[:-1],1,-1)
 	# Extract the spread and convert to numeric while simultaneously multiplying by the above multiplier
 	spreads = pd.to_numeric(spreads['spread'].str.split().str[-1]) * home_spread
+	results['Spread'] = spreads.reset_index()['spread']
 
 	home.drop(['spread','total score'],axis=1,inplace=True)
 	away.drop(['spread','total score'],axis=1,inplace=True)
@@ -435,9 +445,9 @@ def prediction_set(df,cutoff_date):
 		a_pass_att = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['pass_attempts'].values[0]
 		matchups.ix[row, 'p_attempt_diff'] = h_pass_att - a_pass_att
 
-	return matchups, spreads, score
+	return matchups, results
 
-def model_dev(train_set,matchups,spreads):
+def model_dev(train_set,matchups,results):
 
 	""" Create the testing set for the algo creation """
 	# Create a sample set to pass into the machine learning algorithm
@@ -520,11 +530,11 @@ def model_dev(train_set,matchups,spreads):
 
 	# predicted_spreads = pd.DataFrame(columns = ['game_date','results'])
 	# predicted_spreads['game_date'] = train_set['game_date']
-	predicted_spreads = pd.DataFrame(pipeline_optimizer.predict(scaler.transform(matchups)),columns=['results'])
-	predicted_spreads = predicted_spreads.set_index(spreads.index)
-	print predicted_spreads.head(20)
-	print spreads.head(20)
-	input()
+	results['Predicted Spread'] = pd.DataFrame(pipeline_optimizer.predict(scaler.transform(matchups)),columns=['results'])
+	
+	# print predicted_spreads.head(20)
+	# print spreads.head(20)
+	# input()
 
 
 
@@ -539,7 +549,7 @@ def model_dev(train_set,matchups,spreads):
 	# print spreads
 	# print predicted_spreads
 	# print bet_vector
-	return predicted_spreads
+	return results
 
 
 def main():
@@ -554,13 +564,15 @@ def main():
 
 	train_set = training_set(df,cutoff_date)
 
-	matchups, spreads, scores = prediction_set(df,cutoff_date)
+	matchups, results = prediction_set(df,cutoff_date)
 
-	predicted_spreads = model_dev(train_set,matchups,spreads)
-	scores.to_csv('scores.csv',sep=',')
-	spreads.to_csv('spreads.csv',sep=',')
-	predicted_spreads.to_csv('predicted_spreads.csv',sep=',')
-	input()
+	results = model_dev(train_set,matchups,results)
+	results.drop('game_date',axis=1,inplace=True)
+	results.to_csv('results.csv',sep=',')
+	# scores.to_csv('scores.csv',sep=',')
+	# spreads.to_csv('spreads.csv',sep=',')
+	# predicted_spreads.to_csv('predicted_spreads.csv',sep=',')
+	# input()
 
 
 
