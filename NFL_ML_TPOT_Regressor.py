@@ -13,7 +13,7 @@ training_features, testing_features, training_classes, testing_classes = \
 
 exported_pipeline = make_pipeline(
     FastICA(),
-    LassoLarsCV(normalize=False)
+    LassoLarsCV()
 )
 
 exported_pipeline.fit(training_features, training_classes)

@@ -217,7 +217,7 @@ def training_set(df,cutoff_date):
 	train_set = df[df.game_date < cutoff_date].copy()
 
 	train_set['result_spread'] = train_set['home_score'] - train_set['away_score']
-	train_set.drop(['overunder','apass_tot','hpass_tot','away_team','home_team','home_score','away_score','vegasline','home_pens','away_pens'],axis = 1,inplace = True)
+	train_set.drop(['game_date','overunder','apass_tot','hpass_tot','away_team','home_team','home_score','away_score','vegasline','home_pens','away_pens'],axis = 1,inplace = True)
 
 	# Fill NaNs with outlier values
 	train_set.fillna(-999999, inplace=True)
@@ -261,7 +261,6 @@ def training_set(df,cutoff_date):
 	# Calculate passing attempts differential
 	train_set['p_attempt_diff'] = train_set['home_pass_attempts'] - train_set['away_pass_attempts']
 
-	train_set.sort_values('game_date',inplace=True)
 	train_set.drop(['home_oyds','away_oyds','home_poss','away_poss','home_third','away_third','home_four','away_four','home_turn','away_turn','home_sack','away_sack','hsack_yds','asack_yds','hpens_yds','apens_yds','home_pass','away_pass','home_rush','away_rush','hrush_att','arush_att','home_pass_yards','away_pass_yards','home_pass_attempts','away_pass_attempts'],axis = 1,inplace = True)
 
 	# print train_set.columns
@@ -274,13 +273,6 @@ def prediction_set(df,cutoff_date):
 	# Create dataset to be used for prediction
 	predicting_set = df[df.game_date >= cutoff_date].set_index('game_date')
 	predicting_set = predicting_set.sort_index()	# Sort ascending by index
-	results = predicting_set.copy()
-	columns = results.columns
-	results['Spread'] = 0
-	results['Predicted Spread'] = 0
-	results['Scores'] = 0
-	results.drop(columns,axis=1,inplace=True)
-	results.reset_index(inplace=True)
 	predicting_set['week'] = np.nan # Create column indicating which game week the team is in
 
 	# Populating the week column of predicting_set
@@ -343,17 +335,25 @@ def prediction_set(df,cutoff_date):
 	away_score.sort_index(inplace=True)
 	home_score.sort_index(inplace=True)
 
-	scores = home_score['home_score'] - away_score['away_score']
-	scores = scores.reset_index()
-	results['Scores'] = scores.reset_index()[0]
+
+
+
+
+	""" The spreads on the website have been updated to always show the favorite, so you'll need to
+	first filter out the team from the spread column and check to see if it is the home or away team.
+	Then you'll need to adjust the spread to be positive or negative whether the home team is the favorite.
+	Obviously if the home team is the favorite then the spread will simply be negative. """
+
+
 
 	# Pull the actual spreads from the scraped data
 	spreads = home[home['week'] >= 4]
-	# If the home team is the team listed in the spread then the spread will not change, otherwise it will be multiplied by -1
-	home_spread = np.where(spreads['team'].str.split() == spreads['spread'].str.split().str[:-1],1,-1)
-	# Extract the spread and convert to numeric while simultaneously multiplying by the above multiplier
-	spreads = pd.to_numeric(spreads['spread'].str.split().str[-1]) * home_spread
-	results['Spread'] = spreads.reset_index()['spread']
+	spreads = spreads['spread'].str.split().str[-1]
+
+	print home['spread'].head(20)
+	input()
+
+	spreads = pd.to_numeric(spreads)
 
 	home.drop(['spread','total score'],axis=1,inplace=True)
 	away.drop(['spread','total score'],axis=1,inplace=True)
@@ -445,10 +445,9 @@ def prediction_set(df,cutoff_date):
 		a_pass_att = total_stats[((total_stats.index.values == a_team) & (total_stats.week == week))]['pass_attempts'].values[0]
 		matchups.ix[row, 'p_attempt_diff'] = h_pass_att - a_pass_att
 
-	return matchups, results
+	return matchups, spreads
 
-def model_dev(train_set,matchups,results):
-
+def model_dev(train_set,matchups,spreads):
 	""" Create the testing set for the algo creation """
 	# Create a sample set to pass into the machine learning algorithm
 	X = train_set[['rush_attempt_diff', 'turn_diff', 'yards_diff', 'third_diff', 'sack_diff', 'sack_ydiff', 'poss_diff', 'p_attempt_diff']].copy()
@@ -464,7 +463,7 @@ def model_dev(train_set,matchups,results):
 	X = scaler.transform(X)
 
 	# Delete the dataframe to clear memory
-	# del train_set
+	del train_set
 
 	# Split out training and testing data sets
 	X_train, X_test, y_train, y_test = model_selection.train_test_split(X,y,test_size=0.25,random_state=0)
@@ -492,35 +491,25 @@ def model_dev(train_set,matchups,results):
 			clf = linear_model.LogisticRegression(C=c,random_state=42)
 			selector = RFE(clf)
 			selector = selector.fit(X_train,y_train)
-
 			# Calculate probabilities using the predict_proba method for logistic regression
 			probabilities = selector.predict_proba(scaler.transform(matchups))
-
 			# Vectorize the spread_conversion function and apply the function to the probabilities result vector
 			vfunc = np.vectorize(spread_conversion)
 			predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,0])
-
 			# If the actual line for the home team is lower than the predicted line then you would take the away team, otherwise take the home team
 			bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
-
 			# Create the actual result vector where a tie counts as a loss for the home team
 			game_result = np.array(np.where(home_score.ix[:,0] + predicted_spreads[:] > away_score.ix[:,0], 1, 0))
-
 			# Check to see where the bet_vector equals the actual game result with the spread included
 			result = np.array(np.where(bet_vector == game_result,1,0))
-
 			prob_result = float(np.sum(result)) / len(result)
-
 			# print 'Number of features =', feat, 'C =',c,'  Percent correct =',prob_result
-
 			if prob_result > prob_val:
 				prob_val = prob_result
 				C_val = c
 				feat_val = feat
-
 	print 'Score =',selector.score(X_test,y_test)
 	# print prob_val, C_val, feat
-
 	clf = linear_model.LogisticRegression(C=C_val,random_state=42)
 	clf = clf.fit(X_train,y_train)
 	probabilities = clf.predict_proba(scaler.transform(matchups))
@@ -528,29 +517,20 @@ def model_dev(train_set,matchups,results):
 	predicted_spreads = np.apply_along_axis(vfunc,0,probabilities[:,0])
 	"""
 
-	# predicted_spreads = pd.DataFrame(columns = ['game_date','results'])
-	# predicted_spreads['game_date'] = train_set['game_date']
-	results['Predicted Spread'] = pd.DataFrame(pipeline_optimizer.predict(scaler.transform(matchups)),columns=['results'])
-	
-	# print predicted_spreads.head(20)
-	# print spreads.head(20)
-	# input()
+	predicted_spreads = pd.DataFrame(pipeline_optimizer.predict(scaler.transform(matchups)),columns = ['results'])
+	bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
+	print spreads
+	print predicted_spreads
+	print bet_vector
 
 
-
-
-
-
-
-
-
-	""" This is throwing a comparison error that you need to fix if you want to compare in the program """
-	# bet_vector = np.array(np.where(predicted_spreads > spreads,0,1))
-	# print spreads
-	# print predicted_spreads
-	# print bet_vector
-	return results
-
+# def ensemble_dev(train_set,matchups,spreads):
+# 	print train_set.head()
+# 	input()
+# 	print matchups.head()
+# 	input()
+# 	print spreads.head()
+# 	input()
 
 def main():
 	# Read in csv table
@@ -564,15 +544,13 @@ def main():
 
 	train_set = training_set(df,cutoff_date)
 
-	matchups, results = prediction_set(df,cutoff_date)
+	matchups, spreads = prediction_set(df,cutoff_date)
+	train_set.to_csv('train_set.csv',sep=',')
+	matchups.to_csv('matchups.csv',sep=',')
+	spreads.to_csv('spreads.csv',sep=',')
 
-	results = model_dev(train_set,matchups,results)
-	results.drop('game_date',axis=1,inplace=True)
-	results.to_csv('results.csv',sep=',')
-	# scores.to_csv('scores.csv',sep=',')
-	# spreads.to_csv('spreads.csv',sep=',')
-	# predicted_spreads.to_csv('predicted_spreads.csv',sep=',')
-	# input()
+	# ensemble_dev(train_set,matchups,spreads)
+	input()
 
 
 
